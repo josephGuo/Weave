@@ -50,16 +50,19 @@ type TokenBucket struct {
 	capacity   int        // 令牌桶容量
 	tokens     float64    // 当前令牌数量
 	lastRefill time.Time  // 上次填充令牌的时间
+	lastAccess time.Time  // 上次访问时间（用于清理过期桶）
 	mtx        sync.Mutex // 互斥锁，保证线程安全
 }
 
 // NewTokenBucket 创建一个新的令牌桶
 func NewTokenBucket(rate float64, capacity int) *TokenBucket {
+	now := time.Now()
 	return &TokenBucket{
 		rate:       rate,
 		capacity:   capacity,
 		tokens:     float64(capacity),
-		lastRefill: time.Now(),
+		lastRefill: now,
+		lastAccess: now,
 	}
 }
 
@@ -73,6 +76,9 @@ func (tb *TokenBucket) Allow() bool {
 func (tb *TokenBucket) Take(count int) bool {
 	tb.mtx.Lock()
 	defer tb.mtx.Unlock()
+
+	// 更新最后访问时间
+	tb.lastAccess = time.Now()
 
 	// 计算自上次填充以来应该生成的令牌数
 	now := time.Now()
@@ -96,19 +102,52 @@ func (tb *TokenBucket) Take(count int) bool {
 
 // TokenBucketManager 管理多个客户端的令牌桶
 type TokenBucketManager struct {
-	rate     float64
-	capacity int
-	buckets  map[string]*TokenBucket
-	mtx      sync.RWMutex
+	rate        float64
+	capacity    int
+	buckets     map[string]*TokenBucket
+	mtx         sync.RWMutex
+	stopCleanup chan struct{}
 }
 
 // NewTokenBucketManager 创建一个新的令牌桶管理器
 func NewTokenBucketManager(rate float64, capacity int) *TokenBucketManager {
-	return &TokenBucketManager{
-		rate:     rate,
-		capacity: capacity,
-		buckets:  make(map[string]*TokenBucket),
+	tbm := &TokenBucketManager{
+		rate:        rate,
+		capacity:    capacity,
+		buckets:     make(map[string]*TokenBucket),
+		stopCleanup: make(chan struct{}),
 	}
+	// 启动后台清理 goroutine，每5分钟清理一次过期令牌桶
+	go tbm.cleanupExpiredBuckets()
+	return tbm
+}
+
+// cleanupExpiredBuckets 定期清理过期的令牌桶（超过5分钟未使用）
+func (tbm *TokenBucketManager) cleanupExpiredBuckets() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			tbm.mtx.Lock()
+			for clientID, bucket := range tbm.buckets {
+				bucket.mtx.Lock()
+				if time.Since(bucket.lastAccess) > 5*time.Minute {
+					delete(tbm.buckets, clientID)
+				}
+				bucket.mtx.Unlock()
+			}
+			tbm.mtx.Unlock()
+		case <-tbm.stopCleanup:
+			return
+		}
+	}
+}
+
+// StopCleanup 停止清理 goroutine
+func (tbm *TokenBucketManager) StopCleanup() {
+	close(tbm.stopCleanup)
 }
 
 // Allow 检查指定客户端是否可以继续请求
