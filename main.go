@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -31,9 +30,9 @@ func loadEnvFile(filePath string) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("Warning: .env file not found at %s", filePath)
+			pkg.Warn(".env file not found", zap.String("path", filePath))
 		} else {
-			log.Printf("Warning: Failed to read .env file: %v", err)
+			pkg.Warn("Failed to read .env file", zap.Error(err))
 		}
 		return
 	}
@@ -56,7 +55,7 @@ func loadEnvFile(filePath string) {
 			}
 
 			if err := os.Setenv(key, value); err != nil {
-				log.Printf("Warning: Failed to set %s: %v", key, err)
+				pkg.Warn("Failed to set environment variable", zap.String("key", key), zap.Error(err))
 			} else {
 				successCount++
 			}
@@ -64,9 +63,9 @@ func loadEnvFile(filePath string) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("Warning: Error reading .env file: %v", err)
+		pkg.Warn("Error reading .env file", zap.Error(err))
 	}
-	log.Printf(".env file loaded successfully, set %d environment variables", successCount)
+	pkg.Info(".env file loaded", zap.Int("variables", successCount))
 }
 
 func main() {
@@ -110,20 +109,20 @@ func main() {
 	// 数据库迁移（异步）
 	go func() {
 		if !config.Config.AutoMigrate {
-			log.Println("Starting SQL migrations...")
+			pkg.Info("Starting SQL migrations...")
 			mm := migration.NewMigrationManager()
 			if err := mm.Init(); err != nil {
-				log.Printf("Warning: Failed to initialize migration manager: %v", err)
+				pkg.Warn("Failed to initialize migration manager", zap.Error(err))
 			} else {
 				if err := mm.Up(); err != nil {
-					log.Printf("Warning: Migration errors: %v", err)
+					pkg.Warn("Migration errors", zap.Error(err))
 				} else {
 					pkg.Info("SQL migrations completed successfully")
 				}
 			}
 		} else {
 			// 仅当启用自动迁移时才使用GORM自动迁移
-			log.Println("Starting GORM auto-migration...")
+			pkg.Info("Starting GORM auto-migration...")
 			if err := models.MigrateTables(pkg.DB); err != nil {
 				pkg.Warn("Failed to migrate database tables", zap.Error(err))
 			} else {
