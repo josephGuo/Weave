@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"weave/controllers"
 	"weave/models"
 )
 
@@ -20,9 +19,9 @@ func setupMemoryDBForTeam(t *testing.T) *gorm.DB {
 
 func TestCreateTeam_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	_ = setupMemoryDBForTeam(t)
+	db := setupMemoryDBForTeam(t)
 
-	tc := controllers.TeamController{}
+	tc := newTestTeamController(db)
 	r := gin.New()
 	// Inject authenticated context
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(10)); c.Set("user_id", uint(99)); c.Next() })
@@ -55,7 +54,7 @@ func TestCreateTeam_DuplicateName(t *testing.T) {
 		t.Fatalf("seed team error: %v", err)
 	}
 
-	tc := controllers.TeamController{}
+	tc := newTestTeamController(db)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(5)); c.Set("user_id", uint(9)); c.Next() })
 	r.POST("/teams", tc.CreateTeam)

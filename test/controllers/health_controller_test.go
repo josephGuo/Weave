@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"weave/controllers"
 	"weave/plugins"
 	"weave/plugins/core"
 )
@@ -37,9 +36,9 @@ func (p *hcTestPlugin) Execute(params map[string]interface{}) (interface{}, erro
 
 func TestGetHealth_OK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	_ = setupMemoryDBForHealth(t)
+	db := setupMemoryDBForHealth(t)
 
-	hc := controllers.HealthController{}
+	hc := newTestHealthController(db)
 	r := gin.New()
 	r.GET("/health", hc.GetHealth)
 
@@ -69,9 +68,9 @@ func TestGetHealth_OK(t *testing.T) {
 
 func TestPluginHealthCheck_NotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	_ = setupMemoryDBForHealth(t)
+	db := setupMemoryDBForHealth(t)
 
-	hc := controllers.HealthController{}
+	hc := newTestHealthController(db)
 	r := gin.New()
 	r.GET("/health/plugins/:name", hc.PluginHealthCheck)
 
@@ -93,7 +92,7 @@ func TestPluginHealthCheck_NotFound(t *testing.T) {
 
 func TestPluginHealthCheck_Enabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	_ = setupMemoryDBForHealth(t)
+	db := setupMemoryDBForHealth(t)
 
 	// Register a test plugin
 	_ = plugins.PluginManager.Unregister("hc_demo")
@@ -102,7 +101,7 @@ func TestPluginHealthCheck_Enabled(t *testing.T) {
 	}
 	defer func() { _ = plugins.PluginManager.Unregister("hc_demo") }()
 
-	hc := controllers.HealthController{}
+	hc := newTestHealthController(db)
 	r := gin.New()
 	r.GET("/health/plugins/:name", hc.PluginHealthCheck)
 
