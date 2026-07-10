@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"weave/config"
+	"weave/controllers"
 	"weave/middleware"
 	"weave/models"
 	"weave/pkg"
@@ -21,6 +22,12 @@ import (
 	fc "weave/plugins/features/FormatConverter"
 	note "weave/plugins/features/Note"
 	"weave/routers"
+	"weave/services/email"
+	"weave/services/health"
+	"weave/services/tool"
+	"weave/services/user"
+	"weave/services/audit"
+	"weave/services/team"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -131,8 +138,32 @@ func main() {
 		}
 	}()
 
+	// 创建Service实例
+	emailConfig := email.EmailConfig{
+		SMTPServer: config.Config.Email.SMTPServer,
+		SMTPPort:   config.Config.Email.SMTPPort,
+		Username:   config.Config.Email.Username,
+		Password:   config.Config.Email.Password,
+		From:       config.Config.Email.From,
+	}
+	emailSvc := email.NewEmailService(emailConfig, pkg.DB)
+	userSvc := user.NewUserService(pkg.DB, emailSvc)
+	teamSvc := team.NewTeamService(pkg.DB)
+	auditSvc := audit.NewAuditService(pkg.DB)
+	toolSvc := tool.NewToolService(pkg.DB)
+	healthSvc := health.NewHealthService(pkg.DB)
+
+	// 创建Controller实例
+	userCtrl := controllers.NewUserController(userSvc, emailSvc)
+	teamCtrl := controllers.NewTeamController(teamSvc)
+	auditCtrl := controllers.NewAuditController(auditSvc)
+	toolCtrl := controllers.NewToolController(toolSvc)
+	healthCtrl := controllers.NewHealthController(healthSvc)
+	pluginCtrl := controllers.NewPluginController()
+	lbCtrl := controllers.NewLoadBalancerController()
+
 	// 初始化路由
-	router := routers.SetupRouter()
+	router := routers.SetupRouter(userCtrl, teamCtrl, auditCtrl, toolCtrl, healthCtrl, pluginCtrl, lbCtrl)
 
 	// 添加错误处理中间件
 	errHandler := middleware.NewErrorHandler()

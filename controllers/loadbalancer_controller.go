@@ -21,6 +21,11 @@ var RecordHTTPRequest = metrics.RecordHTTPRequest
 // LoadBalancerController 负载均衡管理控制器
 type LoadBalancerController struct{}
 
+// NewLoadBalancerController 创建负载均衡控制器实例
+func NewLoadBalancerController() *LoadBalancerController {
+	return &LoadBalancerController{}
+}
+
 // LoadBalancerStatus 负载均衡状态信息
 type LoadBalancerStatus struct {
 	InstanceID   string            `json:"instance_id"`

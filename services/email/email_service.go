@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"weave/models"
-	"weave/pkg"
 	"weave/utils"
 
 	"gorm.io/gorm"
@@ -33,11 +32,12 @@ type EmailConfig struct {
 // EmailService 邮件服务
 type EmailService struct {
 	config EmailConfig
+	db     *gorm.DB
 }
 
 // NewEmailService 创建新的邮件服务实例
-func NewEmailService(config EmailConfig) *EmailService {
-	return &EmailService{config: config}
+func NewEmailService(config EmailConfig, db *gorm.DB) *EmailService {
+	return &EmailService{config: config, db: db}
 }
 
 // isValidEmail 验证邮箱地址格式是否正确
@@ -151,7 +151,7 @@ func (s *EmailService) CreateVerificationCode(email string, tenantID uint) (stri
 func (s *EmailService) VerifyCode(email, code string, tenantID uint) (bool, error) {
 	// 查找最新的未使用且未过期的验证码记录
 	var verificationCode models.EmailVerificationCode
-	result := pkg.DB.Where("email = ? AND used = false AND expires_at > ? AND tenant_id = ?",
+	result := s.db.Where("email = ? AND used = false AND expires_at > ? AND tenant_id = ?",
 		email, time.Now(), tenantID).Order("created_at DESC").First(&verificationCode)
 
 	if result.Error != nil {
@@ -165,7 +165,7 @@ func (s *EmailService) VerifyCode(email, code string, tenantID uint) (bool, erro
 
 	// 标记验证码为已使用
 	verificationCode.Used = true
-	if err := pkg.DB.Save(&verificationCode).Error; err != nil {
+	if err := s.db.Save(&verificationCode).Error; err != nil {
 		return false, err
 	}
 
@@ -175,7 +175,7 @@ func (s *EmailService) VerifyCode(email, code string, tenantID uint) (bool, erro
 // GetLastVerificationTime 获取用户最近一次获取验证码的时间
 func (s *EmailService) GetLastVerificationTime(email string, tenantID uint) (time.Time, error) {
 	var verificationCode models.EmailVerificationCode
-	result := pkg.DB.Where("email = ? AND tenant_id = ?", email, tenantID).Order("created_at DESC").First(&verificationCode)
+	result := s.db.Where("email = ? AND tenant_id = ?", email, tenantID).Order("created_at DESC").First(&verificationCode)
 
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
@@ -202,7 +202,7 @@ func (s *EmailService) CheckRateLimit(email string, tenantID uint) (bool, error)
 
 	// 检查24小时内的总发送次数
 	var count int64
-	pkg.DB.Model(&models.EmailVerificationCode{}).
+	s.db.Model(&models.EmailVerificationCode{}).
 		Where("email = ? AND tenant_id = ? AND created_at > ?",
 			email, tenantID, time.Now().Add(-24*time.Hour)).
 		Count(&count)
