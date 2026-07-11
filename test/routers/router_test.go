@@ -13,14 +13,44 @@ import (
 	"gorm.io/gorm/schema"
 
 	"weave/config"
+	"weave/controllers"
 	"weave/pkg"
 	"weave/routers"
+	"weave/services/audit"
+	"weave/services/email"
+	"weave/services/health"
+	"weave/services/team"
+	"weave/services/tool"
+	"weave/services/user"
 	"weave/utils"
 )
 
+// newControllersForTest 创建所有控制器实例用于测试
+func newControllersForTest(db *gorm.DB) (*controllers.UserController,
+	*controllers.TeamController,
+	*controllers.AuditController,
+	*controllers.ToolController,
+	*controllers.HealthController,
+	*controllers.PluginController,
+	*controllers.LoadBalancerController) {
+
+	emailSvc := email.NewEmailService(email.EmailConfig{}, db)
+	userSvc := user.NewUserService(db, emailSvc)
+	userCtrl := controllers.NewUserController(userSvc, emailSvc)
+	teamCtrl := controllers.NewTeamController(team.NewTeamService(db))
+	auditCtrl := controllers.NewAuditController(audit.NewAuditService(db))
+	toolCtrl := controllers.NewToolController(tool.NewToolService(db))
+	healthCtrl := controllers.NewHealthController(health.NewHealthService(db))
+	pluginCtrl := controllers.NewPluginController()
+	lbCtrl := controllers.NewLoadBalancerController()
+
+	return userCtrl, teamCtrl, auditCtrl, toolCtrl, healthCtrl, pluginCtrl, lbCtrl
+}
+
 func TestRootRouteOK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := routers.SetupRouter()
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{NamingStrategy: schema.NamingStrategy{SingularTable: true}})
+	router := routers.SetupRouter(newControllersForTest(db))
 
 	req, _ := http.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -53,7 +83,7 @@ func TestHealthRouteOK_WithSQLite(t *testing.T) {
 	}
 	pkg.DB = db
 
-	router := routers.SetupRouter()
+	router := routers.SetupRouter(newControllersForTest(db))
 	req, _ := http.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -81,7 +111,8 @@ func TestHealthRouteOK_WithSQLite(t *testing.T) {
 
 func TestPluginHealth_NotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := routers.SetupRouter()
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{NamingStrategy: schema.NamingStrategy{SingularTable: true}})
+	router := routers.SetupRouter(newControllersForTest(db))
 
 	req, _ := http.NewRequest(http.MethodGet, "/health/plugins/unknown", nil)
 	w := httptest.NewRecorder()
@@ -102,7 +133,8 @@ func TestPluginHealth_NotFound(t *testing.T) {
 
 func TestPluginsList_Unauthorized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := routers.SetupRouter()
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{NamingStrategy: schema.NamingStrategy{SingularTable: true}})
+	router := routers.SetupRouter(newControllersForTest(db))
 
 	req, _ := http.NewRequest(http.MethodGet, "/api/v1/plugins/", nil)
 	w := httptest.NewRecorder()
@@ -130,7 +162,8 @@ func TestPluginsList_Authorized_Empty(t *testing.T) {
 		t.Fatalf("generate token error: %v", err)
 	}
 
-	router := routers.SetupRouter()
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{NamingStrategy: schema.NamingStrategy{SingularTable: true}})
+	router := routers.SetupRouter(newControllersForTest(db))
 	req, _ := http.NewRequest(http.MethodGet, "/api/v1/plugins/", nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	w := httptest.NewRecorder()
@@ -151,7 +184,8 @@ func TestPluginsList_Authorized_Empty(t *testing.T) {
 
 func TestMetricsEndpoint_OK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := routers.SetupRouter()
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{NamingStrategy: schema.NamingStrategy{SingularTable: true}})
+	router := routers.SetupRouter(newControllersForTest(db))
 
 	req, _ := http.NewRequest(http.MethodGet, "/metrics", nil)
 	w := httptest.NewRecorder()

@@ -14,7 +14,14 @@ import (
 )
 
 // SetupRouter 配置路由
-func SetupRouter() *gin.Engine {
+func SetupRouter(userCtrl *controllers.UserController,
+	teamCtrl *controllers.TeamController,
+	auditCtrl *controllers.AuditController,
+	toolCtrl *controllers.ToolController,
+	healthCtrl *controllers.HealthController,
+	pluginCtrl *controllers.PluginController,
+	lbCtrl *controllers.LoadBalancerController) *gin.Engine {
+
 	router := gin.New()
 
 	// 请求体大小限制
@@ -83,7 +90,6 @@ func SetupRouter() *gin.Engine {
 
 			// 限流保护，为认证接口添加限流：每秒允许10个请求，突发容量20
 			auth.Use(middleware.RateLimiter(10, 20))
-			userCtrl := controllers.NewUserController()
 			auth.POST("/register", userCtrl.Register)
 			auth.POST("/login", userCtrl.Login)
 			auth.POST("/refresh-token", userCtrl.RefreshToken)
@@ -107,7 +113,6 @@ func SetupRouter() *gin.Engine {
 				users.Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
 				users.Use(middleware.TimeoutMiddleware(middleware.DefaultTimeoutConfig()))
 
-				userCtrl := controllers.NewUserController()
 				users.GET("/", userCtrl.GetUsers)
 				users.GET("/:id", userCtrl.GetUser)
 				users.POST("/", userCtrl.CreateUser)
@@ -124,7 +129,6 @@ func SetupRouter() *gin.Engine {
 				teams.Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
 				teams.Use(middleware.TimeoutMiddleware(middleware.DefaultTimeoutConfig()))
 
-				teamCtrl := &controllers.TeamController{}
 				teams.GET("/", teamCtrl.GetTeams) // 获取用户所属的团队列表
 				teams.POST("/", teamCtrl.CreateTeam)
 				teams.PUT("/:id", teamCtrl.UpdateTeam)                        // 更新团队信息
@@ -145,7 +149,6 @@ func SetupRouter() *gin.Engine {
 				audit.Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
 				audit.Use(middleware.TimeoutMiddleware(middleware.DefaultTimeoutConfig()))
 
-				auditCtrl := &controllers.AuditController{}
 				audit.GET("/logs", auditCtrl.GetAuditLogs)    // 获取审计日志列表
 				audit.GET("/logs/:id", auditCtrl.GetAuditLog) // 获取单个审计日志详情
 				audit.GET("/stats", auditCtrl.GetAuditStats)  // 获取审计日志统计信息
@@ -158,7 +161,6 @@ func SetupRouter() *gin.Engine {
 				tools.Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
 				tools.Use(middleware.TimeoutMiddleware(middleware.DefaultTimeoutConfig()))
 
-				toolCtrl := &controllers.ToolController{}
 				tools.GET("/", toolCtrl.GetTools)
 				tools.GET("/:id", toolCtrl.GetTool)
 				tools.POST("/", toolCtrl.CreateTool)
@@ -179,7 +181,6 @@ func SetupRouter() *gin.Engine {
 				plugins.Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
 				plugins.Use(middleware.TimeoutMiddleware(middleware.DefaultTimeoutConfig()))
 
-				pluginCtrl := &controllers.PluginController{}
 				// 获取所有插件信息
 				plugins.GET("/", pluginCtrl.GetAllPlugins)
 				// 获取插件状态
@@ -201,7 +202,6 @@ func SetupRouter() *gin.Engine {
 				loadbalancer.Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
 				loadbalancer.Use(middleware.TimeoutMiddleware(middleware.DefaultTimeoutConfig()))
 
-				lbCtrl := &controllers.LoadBalancerController{}
 				// 获取负载均衡状态
 				loadbalancer.GET("/status", lbCtrl.GetLoadBalancerStatus)
 				// 获取特定实例健康状态
@@ -217,7 +217,6 @@ func SetupRouter() *gin.Engine {
 	}
 
 	// 根路径和健康检查路由放在appGroup内，确保一致的中间件处理
-	healthCtrl := &controllers.HealthController{}
 	appGroup.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message":             "欢迎使用 Weave 服务！",

@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"weave/controllers"
 	"weave/models"
 )
 
@@ -31,7 +30,7 @@ func TestGetTools_TenantIsolation(t *testing.T) {
 		t.Fatalf("seed t2 error: %v", err)
 	}
 
-	tc := controllers.ToolController{}
+	tc := newTestToolController(db)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(1)); c.Next() })
 	r.GET("/tools", tc.GetTools)
@@ -54,9 +53,9 @@ func TestGetTools_TenantIsolation(t *testing.T) {
 
 func TestGetTool_NotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	_ = setupMemoryDBForTool(t)
+	db := setupMemoryDBForTool(t)
 
-	tc := controllers.ToolController{}
+	tc := newTestToolController(db)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(1)); c.Next() })
 	r.GET("/tools/:id", tc.GetTool)
@@ -79,9 +78,9 @@ func TestGetTool_NotFound(t *testing.T) {
 
 func TestCreateTool_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	_ = setupMemoryDBForTool(t)
+	db := setupMemoryDBForTool(t)
 
-	tc := controllers.ToolController{}
+	tc := newTestToolController(db)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(3)); c.Next() })
 	r.POST("/tools", tc.CreateTool)
