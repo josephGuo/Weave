@@ -84,7 +84,7 @@ func TestMigrateTables(t *testing.T) {
 	defer cleanupTestDB(t)
 
 	// 使用SQLite元数据检查表是否存在
-	tables := []string{"users", "tools", "tool_histories", "notes", "login_histories", "audit_logs"}
+	tables := []string{"user", "tool", "tool_history", "note", "login_history", "audit_log"}
 	for _, tbl := range tables {
 		var count int64
 		// sqlite_master 查询检查表存在

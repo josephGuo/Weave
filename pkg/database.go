@@ -23,7 +23,7 @@ var DB *gorm.DB
 // InitDatabase 初始化数据库连接
 func InitDatabase() error {
 	// 加载配置
-	if config.Config.Database.Host == "" {
+	if config.Config.Database.Host == "" || config.Config.Database.Username == "" {
 		if err := config.LoadConfig(); err != nil {
 			Error("Failed to load config in InitDatabase", zap.Error(err))
 			return err
