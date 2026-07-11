@@ -9,13 +9,21 @@ import (
 	"weave/pkg/metrics"
 	"weave/plugins"
 	"weave/plugins/core"
+	healthsvc "weave/services/health"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 // HealthController 健康检查控制器
-type HealthController struct{}
+type HealthController struct {
+	healthService healthsvc.HealthService
+}
+
+// NewHealthController 创建健康检查控制器实例
+func NewHealthController(healthSvc healthsvc.HealthService) *HealthController {
+	return &HealthController{healthService: healthSvc}
+}
 
 // GetHealth 全面健康检查
 func (hc *HealthController) GetHealth(c *gin.Context) {
@@ -30,7 +38,7 @@ func (hc *HealthController) GetHealth(c *gin.Context) {
 	}
 
 	// 检查数据库连接健康状态
-	dbHealth := checkDatabaseHealth()
+	dbHealth := hc.checkDatabaseHealth(c)
 	result["database"] = dbHealth
 
 	// 检查插件系统健康状态
@@ -91,17 +99,12 @@ func (hc *HealthController) GetHealth(c *gin.Context) {
 }
 
 // checkDatabaseHealth 检查数据库连接健康状态
-func checkDatabaseHealth() gin.H {
-	startTime := time.Now()
-	db := pkg.DB
+func (hc *HealthController) checkDatabaseHealth(c *gin.Context) gin.H {
+	dbResult := hc.healthService.CheckDatabase(c.Request.Context())
 
-	// 执行简单的SQL查询来测试连接
-	err := db.Exec("SELECT 1").Error
-	duration := time.Since(startTime).Milliseconds()
-
-	if err != nil {
+	if !dbResult.Healthy {
 		// 使用统一错误码系统创建数据库错误
-		dbErr := pkg.NewDatabaseError("Database health check failed", err)
+		dbErr := pkg.NewDatabaseError("Database health check failed", nil)
 		dbErr.WithDetails(map[string]interface{}{
 			"query": "SELECT 1",
 		})
@@ -109,13 +112,13 @@ func checkDatabaseHealth() gin.H {
 		return gin.H{
 			"healthy":      false,
 			"error":        dbErr.Error(),
-			"responseTime": duration,
+			"responseTime": dbResult.ResponseTime,
 		}
 	}
 
 	return gin.H{
 		"healthy":      true,
-		"responseTime": duration,
+		"responseTime": dbResult.ResponseTime,
 	}
 }
 

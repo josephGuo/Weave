@@ -11,20 +11,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"weave/controllers"
 	"weave/models"
 	"weave/utils"
 )
 
-func setupMemoryDB(t *testing.T) *gorm.DB {
+func setupUserDB(t *testing.T) *gorm.DB {
 	return setupTestDB(t)
 }
 
 func TestUserRegister_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	setupMemoryDB(t)
+	db := setupUserDB(t)
 
-	uc := controllers.UserController{}
+	uc := newTestUserController(db)
 	r := gin.New()
 	r.POST("/register", func(c *gin.Context) { uc.Register(c) })
 
@@ -57,7 +56,7 @@ func TestUserRegister_Success(t *testing.T) {
 
 func TestUserLogin_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupMemoryDB(t)
+	db := setupUserDB(t)
 
 	// Seed user with hashed password
 	hash, err := utils.HashPassword("secret123")
@@ -84,7 +83,7 @@ func TestUserLogin_Success(t *testing.T) {
 		t.Fatalf("seed verification code error: %v", err)
 	}
 
-	uc := controllers.UserController{}
+	uc := newTestUserController(db)
 	r := gin.New()
 	// Set tenant_id=1 via middleware
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(1)); c.Next() })
@@ -124,7 +123,7 @@ func TestUserLogin_Success(t *testing.T) {
 
 func TestGetUsers_TenantIsolation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupMemoryDB(t)
+	db := setupUserDB(t)
 
 	u1 := models.User{Username: "alice", Password: "x", Email: "a@example.com", TenantID: 1}
 	u2 := models.User{Username: "bob", Password: "y", Email: "b@example.com", TenantID: 2}
@@ -135,7 +134,7 @@ func TestGetUsers_TenantIsolation(t *testing.T) {
 		t.Fatalf("seed u2 error: %v", err)
 	}
 
-	uc := controllers.UserController{}
+	uc := newTestUserController(db)
 	r := gin.New()
 	// Set tenant_id=1 via middleware
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(1)); c.Next() })
@@ -158,9 +157,9 @@ func TestGetUsers_TenantIsolation(t *testing.T) {
 
 func TestGetUser_NotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	setupMemoryDB(t)
+	db := setupUserDB(t)
 
-	uc := controllers.UserController{}
+	uc := newTestUserController(db)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { c.Set("tenant_id", uint(1)); c.Next() })
 	r.GET("/users/:id", func(c *gin.Context) { uc.GetUser(c) })

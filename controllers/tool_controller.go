@@ -5,21 +5,28 @@ import (
 
 	"weave/models"
 	"weave/pkg"
+	"weave/services/tool"
 
 	"github.com/gin-gonic/gin"
 )
 
 // ToolController 工具控制器
-type ToolController struct{}
+type ToolController struct {
+	toolService tool.ToolService
+}
+
+// NewToolController 创建工具控制器实例
+func NewToolController(toolSvc tool.ToolService) *ToolController {
+	return &ToolController{toolService: toolSvc}
+}
 
 // GetTools 获取所有工具
 func (tc *ToolController) GetTools(c *gin.Context) {
 	tenantID := c.GetUint("tenant_id")
-	var tools []models.Tool
-	result := pkg.DB.Where("tenant_id = ?", tenantID).Find(&tools)
-	if result.Error != nil {
-		err := pkg.NewDatabaseError("Failed to fetch tools", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+	tools, err := tc.toolService.GetTools(c.Request.Context(), tenantID)
+	if err != nil {
+		dbErr := pkg.NewDatabaseError("Failed to fetch tools", err)
+		c.JSON(pkg.GetHTTPStatus(dbErr), gin.H{"code": string(dbErr.Code), "message": dbErr.Message})
 		return
 	}
 	c.JSON(http.StatusOK, tools)
@@ -30,11 +37,10 @@ func (tc *ToolController) GetTool(c *gin.Context) {
 	id := c.Param("id")
 	tenantID := c.GetUint("tenant_id")
 
-	var tool models.Tool
-	result := pkg.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&tool)
-	if result.Error != nil {
-		err := pkg.NewNotFoundError("Tool not found", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+	tool, err := tc.toolService.GetTool(c.Request.Context(), id, tenantID)
+	if err != nil {
+		appErr := pkg.NewNotFoundError("Tool not found", err)
+		c.JSON(pkg.GetHTTPStatus(appErr), gin.H{"code": string(appErr.Code), "message": appErr.Message})
 		return
 	}
 
@@ -45,17 +51,16 @@ func (tc *ToolController) GetTool(c *gin.Context) {
 func (tc *ToolController) CreateTool(c *gin.Context) {
 	var tool models.Tool
 	if err := c.ShouldBindJSON(&tool); err != nil {
-		err := pkg.NewValidationError("Invalid tool data", err)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+		appErr := pkg.NewValidationError("Invalid tool data", err)
+		c.JSON(pkg.GetHTTPStatus(appErr), gin.H{"code": string(appErr.Code), "message": appErr.Message})
 		return
 	}
 
 	tool.TenantID = c.GetUint("tenant_id")
 
-	result := pkg.DB.Create(&tool)
-	if result.Error != nil {
-		err := pkg.NewDatabaseError("Failed to create tool", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+	if err := tc.toolService.CreateTool(c.Request.Context(), &tool); err != nil {
+		dbErr := pkg.NewDatabaseError("Failed to create tool", err)
+		c.JSON(pkg.GetHTTPStatus(dbErr), gin.H{"code": string(dbErr.Code), "message": dbErr.Message})
 		return
 	}
 
@@ -67,32 +72,21 @@ func (tc *ToolController) UpdateTool(c *gin.Context) {
 	id := c.Param("id")
 	tenantID := c.GetUint("tenant_id")
 
-	var oldTool models.Tool
-	result := pkg.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&oldTool)
-	if result.Error != nil {
-		err := pkg.NewNotFoundError("Tool not found", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
-		return
-	}
-
 	var newTool models.Tool
 	if err := c.ShouldBindJSON(&newTool); err != nil {
-		err := pkg.NewValidationError("Invalid tool data", err)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+		appErr := pkg.NewValidationError("Invalid tool data", err)
+		c.JSON(pkg.GetHTTPStatus(appErr), gin.H{"code": string(appErr.Code), "message": appErr.Message})
 		return
 	}
 
-	newTool.ID = oldTool.ID
-	newTool.TenantID = tenantID
-
-	result = pkg.DB.Save(&newTool)
-	if result.Error != nil {
-		err := pkg.NewDatabaseError("Failed to update tool", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+	updated, err := tc.toolService.UpdateTool(c.Request.Context(), id, tenantID, &newTool)
+	if err != nil {
+		appErr := pkg.NewNotFoundError("Tool not found", err)
+		c.JSON(pkg.GetHTTPStatus(appErr), gin.H{"code": string(appErr.Code), "message": appErr.Message})
 		return
 	}
 
-	c.JSON(http.StatusOK, newTool)
+	c.JSON(http.StatusOK, updated)
 }
 
 // DeleteTool 删除工具
@@ -100,18 +94,9 @@ func (tc *ToolController) DeleteTool(c *gin.Context) {
 	id := c.Param("id")
 	tenantID := c.GetUint("tenant_id")
 
-	var tool models.Tool
-	result := pkg.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&tool)
-	if result.Error != nil {
-		err := pkg.NewNotFoundError("Tool not found", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
-		return
-	}
-
-	result = pkg.DB.Delete(&tool)
-	if result.Error != nil {
-		err := pkg.NewDatabaseError("Failed to delete tool", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+	if err := tc.toolService.DeleteTool(c.Request.Context(), id, tenantID); err != nil {
+		appErr := pkg.NewNotFoundError("Tool not found", err)
+		c.JSON(pkg.GetHTTPStatus(appErr), gin.H{"code": string(appErr.Code), "message": appErr.Message})
 		return
 	}
 
@@ -123,11 +108,10 @@ func (tc *ToolController) ExecuteTool(c *gin.Context) {
 	id := c.Param("id")
 	tenantID := c.GetUint("tenant_id")
 
-	var tool models.Tool
-	result := pkg.DB.Where("id = ? AND tenant_id = ?", id, tenantID).First(&tool)
-	if result.Error != nil {
-		err := pkg.NewNotFoundError("Tool not found", result.Error)
-		c.JSON(pkg.GetHTTPStatus(err), gin.H{"code": string(err.Code), "message": err.Message})
+	tool, err := tc.toolService.GetTool(c.Request.Context(), id, tenantID)
+	if err != nil {
+		appErr := pkg.NewNotFoundError("Tool not found", err)
+		c.JSON(pkg.GetHTTPStatus(appErr), gin.H{"code": string(appErr.Code), "message": appErr.Message})
 		return
 	}
 

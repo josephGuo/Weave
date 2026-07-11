@@ -11,6 +11,11 @@ import (
 // 用于处理插件相关的API请求
 type PluginController struct{}
 
+// NewPluginController 创建插件控制器实例
+func NewPluginController() *PluginController {
+	return &PluginController{}
+}
+
 // GetAllPlugins 获取所有插件信息
 // @Summary 获取所有插件信息
 // @Description 获取系统中注册的所有插件信息，包括启用状态

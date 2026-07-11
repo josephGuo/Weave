@@ -14,20 +14,30 @@ func TestMain(m *testing.M) {
 	testDBPassword := os.Getenv("TEST_DB_PASSWORD")
 	testDBName := os.Getenv("TEST_DB_NAME")
 
-	// 如果没有设置测试环境变量，则使用默认的测试数据库配置
-	if testDBHost == "" {
+	// 优先使用 TEST_DB_*，否则用默认值
+	if testDBHost != "" {
+		os.Setenv("DB_HOST", testDBHost)
+	} else {
 		os.Setenv("DB_HOST", "localhost")
 	}
-	if testDBPort == "" {
+	if testDBPort != "" {
+		os.Setenv("DB_PORT", testDBPort)
+	} else {
 		os.Setenv("DB_PORT", "3306")
 	}
-	if testDBUsername == "" {
+	if testDBUsername != "" {
+		os.Setenv("DB_USERNAME", testDBUsername)
+	} else {
 		os.Setenv("DB_USERNAME", "root")
 	}
-	if testDBPassword == "" {
+	if testDBPassword != "" {
+		os.Setenv("DB_PASSWORD", testDBPassword)
+	} else {
 		os.Setenv("DB_PASSWORD", "123456")
 	}
-	if testDBName == "" {
+	if testDBName != "" {
+		os.Setenv("DB_NAME", testDBName)
+	} else {
 		os.Setenv("DB_NAME", "weave_test")
 	}
 
