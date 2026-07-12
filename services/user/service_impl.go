@@ -6,20 +6,19 @@ import (
 	"time"
 
 	"weave/models"
-	"weave/services/email"
 	"weave/utils"
 
 	"gorm.io/gorm"
 )
 
 type userServiceImpl struct {
-	db           *gorm.DB
-	emailService *email.EmailService
+	db      *gorm.DB
+	emailer *emailer
 }
 
 // NewUserService 创建用户服务实例
-func NewUserService(db *gorm.DB, emailSvc *email.EmailService) UserService {
-	return &userServiceImpl{db: db, emailService: emailSvc}
+func NewUserService(db *gorm.DB, emailCfg EmailConfig) UserService {
+	return &userServiceImpl{db: db, emailer: newEmailer(emailCfg)}
 }
 
 func (s *userServiceImpl) Register(ctx context.Context, req RegisterRequest) (*models.User, error) {
@@ -64,7 +63,7 @@ func (s *userServiceImpl) Login(ctx context.Context, tenantID uint, req LoginReq
 	}
 
 	// 验证邮箱验证码
-	isValid, err := s.emailService.VerifyCode(user.Email, req.Code, tenantID)
+	isValid, err := s.verifyEmailCode(user.Email, req.Code, tenantID)
 	if err != nil || !isValid {
 		return nil, fmt.Errorf("验证码错误或已过期")
 	}
@@ -73,7 +72,7 @@ func (s *userServiceImpl) Login(ctx context.Context, tenantID uint, req LoginReq
 }
 
 func (s *userServiceImpl) LoginWithCode(ctx context.Context, email, code string, tenantID uint) (*models.User, error) {
-	isValid, err := s.emailService.VerifyCode(email, code, tenantID)
+	isValid, err := s.verifyEmailCode(email, code, tenantID)
 	if err != nil || !isValid {
 		return nil, fmt.Errorf("验证码错误或已过期")
 	}
@@ -94,7 +93,7 @@ func (s *userServiceImpl) SendVerificationCode(ctx context.Context, username str
 
 	userEmail := user.Email
 
-	canSend, err := s.emailService.CheckRateLimit(userEmail, tenantID)
+	canSend, err := s.checkVerificationRateLimit(userEmail, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +101,7 @@ func (s *userServiceImpl) SendVerificationCode(ctx context.Context, username str
 		return nil, fmt.Errorf("验证码发送过于频繁，请稍后再试")
 	}
 
-	originalCode, verificationCode, err := s.emailService.CreateVerificationCode(userEmail, tenantID)
+	originalCode, verificationCode, err := s.createVerificationCodeRecord(userEmail, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +112,7 @@ func (s *userServiceImpl) SendVerificationCode(ctx context.Context, username str
 
 	// 异步发送邮件
 	go func() {
-		if err := s.emailService.SendVerificationCode(userEmail, originalCode); err != nil {
+		if err := s.emailer.sendVerificationCode(userEmail, originalCode); err != nil {
 			fmt.Printf("Failed to send verification email to %s: %v\n", userEmail, err)
 		}
 	}()
@@ -242,4 +241,91 @@ func (s *userServiceImpl) RecordLoginHistory(ctx context.Context, username, ipAd
 			fmt.Printf("Failed to record login history: %v\n", err)
 		}
 	}()
+}
+
+// ----- 验证码内部方法 -----
+
+// createVerificationCodeRecord 创建并保存验证码记录
+func (s *userServiceImpl) createVerificationCodeRecord(email string, tenantID uint) (string, *models.EmailVerificationCode, error) {
+	code, err := s.emailer.generateVerificationCode()
+	if err != nil {
+		return "", nil, err
+	}
+
+	hashedCode, err := utils.HashPassword(code)
+	if err != nil {
+		return "", nil, err
+	}
+
+	verificationCode := &models.EmailVerificationCode{
+		Email:     email,
+		Code:      hashedCode,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		Used:      false,
+		TenantID:  tenantID,
+	}
+
+	return code, verificationCode, nil
+}
+
+// verifyEmailCode 验证邮箱验证码
+func (s *userServiceImpl) verifyEmailCode(email, code string, tenantID uint) (bool, error) {
+	var verificationCode models.EmailVerificationCode
+	result := s.db.Where("email = ? AND used = false AND expires_at > ? AND tenant_id = ?",
+		email, time.Now(), tenantID).Order("created_at DESC").First(&verificationCode)
+
+	if result.Error != nil {
+		return false, result.Error
+	}
+
+	if !utils.CheckPasswordHash(code, verificationCode.Code) {
+		return false, fmt.Errorf("invalid verification code")
+	}
+
+	verificationCode.Used = true
+	if err := s.db.Save(&verificationCode).Error; err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// getLastVerificationTime 获取用户最近一次获取验证码的时间
+func (s *userServiceImpl) getLastVerificationTime(email string, tenantID uint) (time.Time, error) {
+	var verificationCode models.EmailVerificationCode
+	result := s.db.Where("email = ? AND tenant_id = ?", email, tenantID).Order("created_at DESC").First(&verificationCode)
+
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return time.Time{}, nil
+		}
+		return time.Time{}, result.Error
+	}
+
+	return verificationCode.CreatedAt, nil
+}
+
+// checkVerificationRateLimit 检查获取验证码的频率限制
+func (s *userServiceImpl) checkVerificationRateLimit(email string, tenantID uint) (bool, error) {
+	lastTime, err := s.getLastVerificationTime(email, tenantID)
+	if err != nil {
+		return false, err
+	}
+
+	if !lastTime.IsZero() && time.Since(lastTime) < 60*time.Second {
+		return false, nil
+	}
+
+	var count int64
+	s.db.Model(&models.EmailVerificationCode{}).
+		Where("email = ? AND tenant_id = ? AND created_at > ?",
+			email, tenantID, time.Now().Add(-24*time.Hour)).
+		Count(&count)
+
+	if count >= 15 {
+		return false, nil
+	}
+
+	return true, nil
 }
