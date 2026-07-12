@@ -12,7 +12,6 @@ import (
 	"weave/models"
 	"weave/pkg"
 	"weave/services/audit"
-	"weave/services/email"
 	"weave/services/health"
 	"weave/services/team"
 	"weave/services/tool"
@@ -42,16 +41,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// newTestEmailService 创建测试用邮件服务
-func newTestEmailService(db *gorm.DB) *email.EmailService {
-	return email.NewEmailService(email.EmailConfig{}, db)
-}
-
 // newTestUserController 创建测试用用户控制器
 func newTestUserController(db *gorm.DB) *controllers.UserController {
-	emailSvc := newTestEmailService(db)
-	userSvc := user.NewUserService(db, emailSvc)
-	return controllers.NewUserController(userSvc, emailSvc)
+	userSvc := user.NewUserService(db, user.EmailConfig{})
+	return controllers.NewUserController(userSvc)
 }
 
 // newTestTeamController 创建测试用团队控制器
