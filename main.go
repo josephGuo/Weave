@@ -22,7 +22,6 @@ import (
 	fc "weave/plugins/features/FormatConverter"
 	note "weave/plugins/features/Note"
 	"weave/routers"
-	"weave/services/email"
 	"weave/services/health"
 	"weave/services/tool"
 	"weave/services/user"
@@ -139,22 +138,20 @@ func main() {
 	}()
 
 	// 创建Service实例
-	emailConfig := email.EmailConfig{
+	userSvc := user.NewUserService(pkg.DB, user.EmailConfig{
 		SMTPServer: config.Config.Email.SMTPServer,
 		SMTPPort:   config.Config.Email.SMTPPort,
 		Username:   config.Config.Email.Username,
 		Password:   config.Config.Email.Password,
 		From:       config.Config.Email.From,
-	}
-	emailSvc := email.NewEmailService(emailConfig, pkg.DB)
-	userSvc := user.NewUserService(pkg.DB, emailSvc)
+	})
 	teamSvc := team.NewTeamService(pkg.DB)
 	auditSvc := audit.NewAuditService(pkg.DB)
 	toolSvc := tool.NewToolService(pkg.DB)
 	healthSvc := health.NewHealthService(pkg.DB)
 
 	// 创建Controller实例
-	userCtrl := controllers.NewUserController(userSvc, emailSvc)
+	userCtrl := controllers.NewUserController(userSvc)
 	teamCtrl := controllers.NewTeamController(teamSvc)
 	auditCtrl := controllers.NewAuditController(auditSvc)
 	toolCtrl := controllers.NewToolController(toolSvc)

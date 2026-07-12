@@ -17,7 +17,6 @@ import (
 	"weave/pkg"
 	"weave/routers"
 	"weave/services/audit"
-	"weave/services/email"
 	"weave/services/health"
 	"weave/services/team"
 	"weave/services/tool"
@@ -34,9 +33,8 @@ func newControllersForTest(db *gorm.DB) (*controllers.UserController,
 	*controllers.PluginController,
 	*controllers.LoadBalancerController) {
 
-	emailSvc := email.NewEmailService(email.EmailConfig{}, db)
-	userSvc := user.NewUserService(db, emailSvc)
-	userCtrl := controllers.NewUserController(userSvc, emailSvc)
+	userSvc := user.NewUserService(db, user.EmailConfig{})
+	userCtrl := controllers.NewUserController(userSvc)
 	teamCtrl := controllers.NewTeamController(team.NewTeamService(db))
 	auditCtrl := controllers.NewAuditController(audit.NewAuditService(db))
 	toolCtrl := controllers.NewToolController(tool.NewToolService(db))

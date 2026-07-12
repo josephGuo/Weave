@@ -7,7 +7,6 @@ import (
 
 	"weave/models"
 	"weave/pkg"
-	"weave/services/email"
 	usersvc "weave/services/user"
 	"weave/utils"
 
@@ -16,15 +15,13 @@ import (
 
 // UserController 用户控制器
 type UserController struct {
-	userService  usersvc.UserService
-	emailService *email.EmailService
+	userService usersvc.UserService
 }
 
 // NewUserController 创建用户控制器实例
-func NewUserController(userSvc usersvc.UserService, emailSvc *email.EmailService) *UserController {
+func NewUserController(userSvc usersvc.UserService) *UserController {
 	return &UserController{
-		userService:  userSvc,
-		emailService: emailSvc,
+		userService: userSvc,
 	}
 }
 
