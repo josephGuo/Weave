@@ -2,79 +2,33 @@ package pkg
 
 import (
 	cryptoRand "crypto/rand"
-	"encoding/base64"
 	"math/big"
-	"math/rand"
-	"sync"
 	"time"
 )
 
-// 定义常量，提高可维护性
-const (
-	// 随机字符串的字符集
-	letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	letterIdxBits = 6                    // 6 bits to represent a letter index
-	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
-)
-
-// 为并发安全使用 sync.Pool 缓存随机数生成器
-var (// 缓存随机数生成器以提高性能
-	randomSourcePool = sync.Pool{
-		New: func() interface{} {
-			return rand.New(rand.NewSource(time.Now().UnixNano()))
-		},
-	}
-
-	// 用于并发安全的互斥锁
-	randomMu sync.Mutex
-)
+// 随机字符串的字符集（大小写字母 + 数字）
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 // RandomString 生成指定长度的随机字符串
-// 使用 crypto/rand 生成高质量随机数，适合安全场景
 func RandomString(n int) string {
-	// 对小字符串使用 math/rand 提高性能
-	if n <= 100 {
-		b := make([]byte, n)
-		randomMu.Lock()
-		rng := randomSourcePool.Get().(*rand.Rand)
-		for i, cache, remain := n-1, rng.Int63(), letterIdxMax; i >= 0; {
-			if remain == 0 {
-				cache, remain = rng.Int63(), letterIdxMax
-			}
-			if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
-				b[i] = letterBytes[idx]
-				i--
-			}
-			cache >>= letterIdxBits
-			remain--
-		}
-		randomSourcePool.Put(rng)
-		randomMu.Unlock()
-		return string(b)
+	if n <= 0 {
+		return ""
 	}
 
-	// 对大字符串使用 crypto/rand 确保安全性
-	return SecureRandomString(n)
+	b := make([]byte, n)
+	cryptoRand.Read(b)
+
+	// 随机字节映射
+	for i := range b {
+		b[i] = letterBytes[int(b[i])%len(letterBytes)]
+	}
+	return string(b)
 }
 
 // SecureRandomString 使用密码学安全的随机数生成器生成随机字符串
-// 适合需要高安全性的场景，如生成令牌、密钥等
+// 保留此函数以保持兼容性
 func SecureRandomString(n int) string {
-	// 计算需要的字节数（base64编码会增加约33%的大小）
-	randomBytes := make([]byte, (n*3)/4) // base64 编码的优化计算
-	_, err := cryptoRand.Read(randomBytes)
-	if err != nil {
-		// 如果 crypto/rand 失败，回退到 math/rand
-		return RandomString(n)
-	}
-
-	// 使用 base64 URL 安全编码并截取指定长度
-	result := base64.URLEncoding.EncodeToString(randomBytes)
-	if len(result) > n {
-		return result[:n]
-	}
-	return result
+	return RandomString(n)
 }
 
 // StrSliceContains 检查字符串切片是否包含指定字符串
