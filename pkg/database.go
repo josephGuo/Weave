@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"weave/config"
@@ -18,7 +19,12 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-var DB *gorm.DB
+var (
+	DB *gorm.DB
+
+	dbMu      sync.RWMutex
+	dbMonitor context.CancelFunc // 用于停止数据库监控协程
+)
 
 // InitDatabase 初始化数据库连接
 func InitDatabase() error {
@@ -121,16 +127,24 @@ func InitDatabase() error {
 	}
 
 	// 启动数据库连接监控（异步）
+	monitorCtx, cancel := context.WithCancel(context.Background())
+	dbMonitor = cancel
 	go func() {
-		// 根据环境配置监测时间间隔
 		monitorInterval := 5 * time.Minute // 生产环境(5分钟)
 		if config.Config.Logger.Development {
 			monitorInterval = 1 * time.Minute // 开发环境(1分钟)
 		}
 		ticker := time.NewTicker(monitorInterval)
-		for range ticker.C {
-			stats := sqlDB.Stats()
-			metrics.UpdateDatabaseConnections(stats.OpenConnections)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				stats := sqlDB.Stats()
+				metrics.UpdateDatabaseConnections(stats.OpenConnections)
+			case <-monitorCtx.Done():
+				return
+			}
 		}
 	}()
 
@@ -186,8 +200,15 @@ func CloseDatabaseWithContext(ctx context.Context) error {
 
 	Info("Database connections closed successfully", zap.Duration("elapsed", elapsed))
 
-	// 清除全局DB变量
+	// 清除全局DB变量（加写锁保护，避免并发请求读取到nil）
+	dbMu.Lock()
 	DB = nil
+	dbMu.Unlock()
+
+	// 停止数据库监控协程
+	if dbMonitor != nil {
+		dbMonitor()
+	}
 
 	return nil
 }

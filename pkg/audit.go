@@ -132,16 +132,36 @@ func AuditLogMiddleware() gin.HandlerFunc {
 		// 对于写操作（POST/PUT/DELETE）进行审计日志记录
 		method := c.Request.Method
 		if method == "POST" || method == "PUT" || method == "DELETE" {
+			// 协程启动前提取所上下文数据，避免并发访问
+			action := strings.ToLower(method)
+			resourceType := extractResourceType(path)
+			resourceID := extractResourceID(path)
+			ipAddress := c.ClientIP()
+			userAgent := c.Request.UserAgent()
+			var userID uint
+			var username string
+			var tenantID uint
+			if id, exists := c.Get("user_id"); exists {
+				userID, _ = id.(uint)
+			}
+			if name, exists := c.Get("username"); exists {
+				username, _ = name.(string)
+			}
+			if tid, exists := c.Get("tenant_id"); exists {
+				tenantID, _ = tid.(uint)
+			}
+
 			// 异步记录审计日志，避免影响响应时间
 			go func() {
-				action := strings.ToLower(method)
-				resourceType := extractResourceType(path)
-				resourceID := extractResourceID(path)
-
-				auditLogger.FromContext(c, AuditLogOptions{
+				_ = auditLogger.Log(AuditLogOptions{
 					Action:       action,
 					ResourceType: resourceType,
 					ResourceID:   resourceID,
+					IPAddress:    ipAddress,
+					UserAgent:    userAgent,
+					UserID:       userID,
+					Username:     username,
+					TenantID:     tenantID,
 				})
 			}()
 		}
